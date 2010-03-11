@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<product productid="phpkd_vbbua" active="1">
+	<title><![CDATA[PHPKD - Ban Under Age Users]]></title>
+	<description><![CDATA[This product will auto ban all underage users (according to settings configuration), this ban will be left automatically after they reach required age. Administrators can set banned age, ban reason and other settings easily.]]></description>
+	<version><![CDATA[4.0.100]]></version>
+	<vendor><![CDATA[$Vendor: PHP KingDom $]]></vendor>
+	<author><![CDATA[$Author: PHPKD $]]></author>
+	<revision><![CDATA[$Revision: 3 $]]></revision>
+	<released><![CDATA[$Date: 2010-02-26 11:55:32 +0200 (Fri, 26 Feb 2010) $]]></released>
+	<url><![CDATA[http://tools.phpkd.net/en/producthelp/url/vbbua/]]></url>
+	<versioncheckurl><![CDATA[http://tools.phpkd.net/en/producthelp/version/vbbua/]]></versioncheckurl>
+	<extradetails><![CDATA[http://tools.phpkd.net/en/producthelp/info/vbbua/]]></extradetails>
+	<dependencies>
+		<dependency dependencytype="vbulletin" minversion="3.8.0" maxversion="4.0.99" />
+	</dependencies>
+	<codes>
+		<code version="*">
+			<installcode><![CDATA[if (!file_exists(DIR . '/includes/cron/phpkd_vbbua.php'))
+{
+	print_dots_stop();
+	print_cp_message('Please upload all files came with "PHPKD - Ban Under Age Users" product before installing or upgrading!');
+}
+
+// ######################################################################
+// ## Debug Stuff: Begin                                               ##
+// ######################################################################
+
+$vbulletin->db->hide_errors();
+// Import debug data in appropriate field
+$phpkdinfo = $info;
+unset($phpkdinfo['description']);
+$phpkdinfo['author'] = trim(substr(substr($arr['author'], 8), 0, -1));
+$phpkdinfo['vendor'] = trim(substr(substr($arr['vendor'], 8), 0, -1));
+$phpkdinfo['revision'] = trim(substr(substr($arr['revision'], 10), 0, -1));
+$phpkdinfo['released'] = trim(substr(substr($arr['released'], 6), 0, -1));
+$phpkdinfo['installdateline'] = TIMENOW;
+if ($vbulletin->options['phpkd_free40_data'])
+{
+	$holder = unserialize($vbulletin->options['phpkd_free40_data']);
+	$holder[$phpkdinfo['productid']] = $phpkdinfo;
+	$data = $vbulletin->db->escape_string(serialize($holder));
+	$vbulletin->db->query_write("
+		UPDATE " . TABLE_PREFIX . "setting
+		SET value = '$data'
+		WHERE varname = 'phpkd_free40_data'
+	");
+}
+else
+{
+	$holder[$phpkdinfo['productid']] = $phpkdinfo;
+	$data = $vbulletin->db->escape_string(serialize($holder));
+
+	$vbulletin->db->query_write("
+		REPLACE INTO " . TABLE_PREFIX . "setting
+			(varname, grouptitle, value, defaultvalue, datatype, optioncode, displayorder, advanced, volatile, validationcode, blacklist, product)
+		VALUES
+			('phpkd_free40_data', 'version', '$data', '', 'free', '', '40100', '0', '1', '', '0', 'phpkd_framework')
+	");
+
+	$vbulletin->db->query_write("
+		REPLACE INTO " . TABLE_PREFIX . "phrase
+			(languageid, fieldname, varname, text, product, username, dateline, version)
+		VALUES
+			('-1', 'vbsettings', 'setting_phpkd_free40_data_title', 'PHP KingDom (PHPKD) Free Products\' Data (4.0.x) [Sensitive]', 'phpkd_framework', '" . $vbulletin->db->escape_string($vbulletin->userinfo['username']) . "', " . TIMENOW . ", '4.0.100'),
+			('-1', 'vbsettings', 'setting_phpkd_free40_data_desc', 'PHP KingDom (PHPKD) Free Products\' Data used for debugging issues. <strong>[Sensitive Data, DON\'T ALTER]</strong>.', 'phpkd_framework', '" . $vbulletin->db->escape_string($vbulletin->userinfo['username']) . "', " . TIMENOW . ", '4.0.100')
+		");
+}
+
+print_dots_start("Installing: \"" . $phpkdinfo['title'] . "\"<br />Version: " . $phpkdinfo['version'] . ", Revision: " . $phpkdinfo['revision'] . ", Released: " . $phpkdinfo['released'] . ".<br />Thanks for choosing PHP KingDom's Products. If you need any help or wish to try any other products we have, just give us a visit at <a href=\"http://www.phpkd.net\" target=\"_blank\">www.phpkd.net</a>. You are always welcomed.<br />Please Wait...", ':', 'phpkd_vbaddon_install_info');
+print_dots_stop();
+$vbulletin->db->show_errors();
+
+// ######################################################################
+// ## Debug Stuff: End                                                 ##
+// ######################################################################]]></installcode>
+			<uninstallcode><![CDATA[// ######################################################################
+// ## Debug Stuff: Begin                                               ##
+// ######################################################################
+
+$vbulletin->db->hide_errors();
+if ($vbulletin->options['phpkd_free40_data'])
+{
+	$holder = unserialize($vbulletin->options['phpkd_free40_data']);
+
+	if ($holder[$vbulletin->db->escape_string($vbulletin->GPC['productid'])])
+	{
+		$phpkdinfo = $holder[$vbulletin->db->escape_string($vbulletin->GPC['productid'])];
+		print_dots_start("Un-installing: \"" . $phpkdinfo['title'] . "\"<br />Version: " . $phpkdinfo['version'] . ", Revision: " . $phpkdinfo['revision'] . ", Released: " . $phpkdinfo['released'] . ".<br />We are sad to see you un-installing '" . $phpkdinfo['title'] . "'. Please if there is any thing we can do to keep you using this software product, just tell us at <a href=\"http://www.phpkd.net\" target=\"_blank\">www.phpkd.net</a>.<br />Please Wait...", ':', 'phpkd_vbaddon_uninstall_info');
+		unset($holder[$vbulletin->db->escape_string($vbulletin->GPC['productid'])]);
+	}
+
+	if (is_array($holder) AND !empty($holder))
+	{
+		$data = $vbulletin->db->escape_string(serialize($holder));
+		$vbulletin->db->query_write("
+			UPDATE " . TABLE_PREFIX . "setting SET
+			value = '$data'
+			WHERE varname = 'phpkd_free40_data'
+		");
+	}
+	else
+	{
+		// delete phrases
+		$vbulletin->db->query_write("
+			DELETE FROM " . TABLE_PREFIX . "phrase
+			WHERE languageid IN (-1, 0) AND
+				fieldname = 'vbsettings' AND
+				varname IN ('setting_phpkd_free40_data_title', 'setting_phpkd_free40_data_desc')
+		");
+
+		// delete setting
+		$vbulletin->db->query_write("DELETE FROM " . TABLE_PREFIX . "setting WHERE varname = 'phpkd_free40_data'");
+	}
+}
+$vbulletin->db->show_errors();
+
+// ######################################################################
+// ## Debug Stuff: End                                                 ##
+// ######################################################################]]></uninstallcode>
+		</code>
+	</codes>
+	<templates>
+	</templates>
+	<stylevardfns>
+	</stylevardfns>
+	<stylevars>
+	</stylevars>
+	<plugins>
+		<plugin active="1" executionorder="5">
+			<title><![CDATA[PHPKD - Ban Under Age Users - [ Print AdminCP Options ]]]></title>
+			<hookname>admin_options_print</hookname>
+			<phpcode><![CDATA[if (preg_match('#^(phpkd_vbbua)(\r\n|\n|\r)(.*)$#siU', $setting['optioncode'], $matches))
+{
+	$setting['optioncode'] = 'phpkd_vbbua';
+	$setting['optiondata'] = trim($matches[3]);
+}
+
+if ($setting['optioncode'] == 'phpkd_vbbua')
+{
+	$handled = true;
+	$usergrouplist = fetch_piped_options($setting['optiondata']);
+	foreach ($vbulletin->usergroupcache as $usergroupid => $usergroup)
+	{
+		if (!($usergroup['genericoptions'] & $vbulletin->bf_ugp_genericoptions['isnotbannedgroup']))
+		{
+			$usergrouplist["$usergroup[usergroupid]"] = $usergroup['title'];
+		}
+	}
+
+	print_select_row($description, $name, $usergrouplist, $setting['value']);
+}]]></phpcode>
+		</plugin>
+	</plugins>
+	<phrases>
+		<phrasetype name="vBulletin Settings" fieldname="vbsettings">
+			<phrase name="setting_phpkd_vbasn_emailto_desc" date="1267272063" username="PHPKD" version="4.0.100"><![CDATA[This option allows you to send an email to the specified staff members when there is newly uploaded Moderated Attachments.]]></phrase>
+			<phrase name="setting_phpkd_vbasn_emailto_title" date="1267272063" username="PHPKD" version="4.0.100"><![CDATA[PHPKD - Moderated Attachments Staff Notify]]></phrase>
+		</phrasetype>
+	</phrases>
+	<options>
+		<settinggroup name="attachment" displayorder="350">
+			<setting varname="phpkd_vbasn_emailto" displayorder="40100">
+				<datatype>integer</datatype>
+				<optioncode>select:piped
+0|no_email
+1|email_moderators
+2|email_moderators_and_administrators</optioncode>
+				<defaultvalue>2</defaultvalue>
+			</setting>
+		</settinggroup>
+	</options>
+	<helptopics>
+	</helptopics>
+	<cronentries>
+	</cronentries>
+	<faqentries>
+	</faqentries>
+</product>

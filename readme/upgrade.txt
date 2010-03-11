@@ -1,0 +1,294 @@
+﻿Upgrade Procedure:
+~~~~~~~~~~~~~~~~~~~~~~~~
+     1. Upload required files to their appropriate places (ALLOW OVERWRITE):
+	includes
+	     xml
+	          bitfield_phpkd_vbasn.xml
+	     md5_sums_phpkd_vbasn.php
+
+     2. Do the following small manual edit, open the file "includes/class_dm_threadpost.php" (follow instructions relative to your vB version):
+	Both 3.8.x & 4.0.x:
+	     Search for:
+-------------------------------------------------
+=================================================
+	function email_moderators($fields)
+=================================================
+-------------------------------------------------
+
+	     Add above it directly the following code:
+-------------------------------------------------
+=================================================
+	// Begin:[ PHPKD - Moderated Attachments Staff Notify ]
+
+	/**
+	* Fetches the amount of moderated attachments associated with a posthash and user
+	*
+	* @param	string	Post hash
+	* @param	integer	User ID associated with post hash (-1 means current user)
+	*
+	* @return	integer	Number of attachments
+	*/
+	function phpkd_vbasn_fetch_mod_attachment_count($postid, $userid = -1)
+	{
+		if ($userid == -1)
+		{
+			$userid = $this->fetch_field('userid', 'post');
+		}
+		$userid = intval($userid);
+
+		$attachcount = $this->dbobject->query_first("
+			SELECT COUNT(*) AS count
+			FROM " . TABLE_PREFIX . "attachment
+			WHERE postid = '$postid'
+				AND userid = $userid
+				AND visible != 1
+		");
+
+		return intval($attachcount['count']);
+	}
+
+
+	/**
+	* Fetches the moderated attachments associated with a posthash and user
+	*
+	* @param	string	Post hash
+	* @param	integer	User ID associated with post hash (-1 means current user)
+	*
+	* @return	array Moderated attachments IDs
+	*/
+	function phpkd_vbasn_fetch_mod_attachment($postid, $userid = -1)
+	{
+		if ($userid == -1)
+		{
+			$userid = $this->fetch_field('userid', 'post');
+		}
+		$userid = intval($userid);
+
+		$attachs = $this->dbobject->query_read_slave("
+			SELECT attachmentid, filename
+			FROM " . TABLE_PREFIX . "attachment
+			WHERE postid = '$postid'
+				AND userid = $userid
+				AND visible != 1
+		");
+
+		$modattach = array();
+		while ($attach = $this->dbobject->fetch_array($attachs))
+		{
+			$modattach[$attach['attachmentid']] = array('attachmentid' => $attach['attachmentid'], 'filename' => $attach['filename'], 'postid' => $attach['postid'], 'dateline' => $attach['dateline']);
+		}
+
+		return $modattach;
+	}
+
+
+	/**
+	* Process notifications & email staff members upon newly uploaded moderated attachments
+	*
+	* @param	string|array	A string or array of dbfields to check for email addresses; also doubles as mod perm names
+	* @param	integer			Number of newly uploaded moderated attachments
+	* @param	array			Array of newly uploaded moderated attachments
+	*/
+	function phpkd_vbasn_email_moderators($fields, $attachcount, $attachs)
+	{
+		global $vbphrase;
+
+		if ($this->info['skip_moderator_email'] OR !$this->info['forum'] OR in_coventry($this->fetch_field('userid', 'post'), true))
+		{
+			return;
+		}
+
+		$mod_emails = $this->phpkd_vbasn_fetch_moderator_modattach_emails($fields, $this->info['forum']['parentlist'], $newpost_lang);
+
+		if (!empty($mod_emails))
+		{
+			$foruminfo = $this->info['forum'];
+			$foruminfo['title_clean'] = unhtmlspecialchars($foruminfo['title_clean']);
+
+			$threadinfo = fetch_threadinfo($this->fetch_field('threadid'));
+
+			$email = ($this->info['user']['email'] ? $this->info['user']['email'] : $this->registry->userinfo['email']);
+			$browsing_user = $this->registry->userinfo['username'];
+
+			// ugly hack -- should be fixed in the future
+			$this->registry->userinfo['username'] = unhtmlspecialchars($this->info['user']['username'] ? $this->info['user']['username'] : $this->registry->userinfo['username']);
+
+			$post = array_merge($this->existing, $this->post);
+			if (!$post['postid'])
+			{
+				$post['postid'] = $this->thread['firstpostid'];
+			}
+
+			require_once(DIR . '/includes/functions_misc.php');
+
+			foreach ($mod_emails AS $toemail)
+			{
+				if ($toemail != $email)
+				{
+					if ($threadinfo['prefixid'])
+					{
+						// need prefix in correct language
+						$threadinfo['prefix_plain'] = fetch_phrase(
+							"prefix_$threadinfo[prefixid]_title_plain",
+							'global',
+							'',
+							false,
+							true,
+							isset($newpost_lang["$toemail"]) ? $newpost_lang["$toemail"] : 0,
+							false
+						) . ' ';
+					}
+					else
+					{
+						$threadinfo['prefix_plain'] = '';
+					}
+
+					$attachdetails = "";
+					foreach ($attachs as $attach)
+					{
+						$attachdetails .= construct_phrase($vbphrase['phpkd_vbasn_modattachitem'], $attach['attachmentid'], $attach['filename']);
+					}
+
+					if (substr(SIMPLE_VERSION, 0, 1) >= 4)
+					{
+						$threadlink = fetch_seo_url('thread|nosession', $threadinfo);
+						eval(fetch_email_phrases('phpkd_vbasn_4x', iif(isset($newpost_lang["$toemail"]), $newpost_lang["$toemail"], 0)));
+					}
+					else
+					{
+						eval(fetch_email_phrases('phpkd_vbasn_3x', iif(isset($newpost_lang["$toemail"]), $newpost_lang["$toemail"], 0)));
+					}
+					vbmail($toemail, $subject, $message);
+				}
+			}
+
+			// back to normal
+			$this->registry->userinfo['username'] = htmlspecialchars_uni($browsing_user);
+		}
+	}
+
+
+	/**
+	* Fetches the email addresses of moderators to email when there is a newly uploaded moderated attachments in a forum.
+	*
+	* @param	string|array	A string or array of dbfields to check for email addresses; also doubles as mod perm names
+	* @param	string|array	A string (comma-delimited) or array of forum IDs to check
+	* @param	array			(By reference) An array of languageids associated with specific email addresses returned
+	*
+	* @return	array			Array of emails to mail
+	*/
+	function phpkd_vbasn_fetch_moderator_modattach_emails($fields, $forums, &$language_info)
+	{
+		// Only proceed if email features are enabled
+		if (!$this->registry->options['enableemail'] OR !$this->registry->options['phpkd_vbasn_emailto'])
+		{
+			return;
+		}
+
+		$language_info = array();
+
+		if (!is_array($fields))
+		{
+			$fields = array($fields);
+		}
+
+		// figure out the fields to select and the permissions to check
+		$field_names = '';
+		$mod_perms = array();
+		foreach ($fields AS $field)
+		{
+			if ($permfield = intval($this->registry->bf_misc_phpkd_vbasn["$field"]))
+			{
+				$mod_perms[] = "(moderator.phpkd_vbasn & $permfield)";
+			}
+
+			$field_names .= "$field, ' ',";
+		}
+
+		if (sizeof($fields) > 1)
+		{
+			// kill trailing comma
+			$field_names = 'CONCAT(' . substr($field_names, 0, -1) . ')';
+		}
+		else
+		{
+			$field_names = reset($fields);
+		}
+
+		// figure out the forums worth checking
+		if (is_array($forums))
+		{
+			$forums = implode(',', $forums);
+		}
+		if (!$forums)
+		{
+			return array();
+		}
+
+		$phpkd_vbasn = '';
+
+		$moderators = $this->registry->db->query_read_slave("
+			SELECT $field_names AS phpkd_vbasn
+			FROM " . TABLE_PREFIX . "forum
+			WHERE forumid IN (" . $this->registry->db->escape_string($forums) . ")
+		");
+		while ($moderator = $this->registry->db->fetch_array($moderators))
+		{
+			$phpkd_vbasn .= ' ' . trim($moderator['phpkd_vbasn']);
+		}
+
+		if (empty($phpkd_vbasn) OR $this->registry->options['phpkd_vbasn_emailto'] == 1)
+		{
+			// get a list of super mod groups
+			$smod_groups = array();
+			foreach ($this->registry->usergroupcache AS $ugid => $groupinfo)
+			{
+				if ($groupinfo['adminpermissions'] & $this->registry->bf_ugp_adminpermissions['ismoderator'])
+				{
+					// super mod group
+					$smod_groups[] = $ugid;
+				}
+			}
+		}
+
+		if ($mod_perms)
+		{
+			$mods = $this->registry->db->query_read_slave("
+				SELECT DISTINCT user.email, user.languageid
+				FROM " . TABLE_PREFIX . "moderator AS moderator
+				LEFT JOIN " . TABLE_PREFIX . "user AS user USING(userid)
+				WHERE
+					(
+						(moderator.forumid IN (" . $this->registry->db->escape_string($forums) . ") AND moderator.forumid <> -1)
+						" . (!empty($smod_groups) ? "OR (user.usergroupid IN (" . implode(',', $smod_groups) . ") AND moderator.forumid = -1)" : '') . "
+					)
+					AND (" . implode(' OR ', $mod_perms) . ")
+			");
+			while ($mod = $this->registry->db->fetch_array($mods))
+			{
+				$language_info["$mod[email]"] = $mod['languageid'];
+				$phpkd_vbasn .= ' ' . $mod['email'];
+			}
+		}
+
+		$emails = preg_split('#\s+#', trim($phpkd_vbasn), -1, PREG_SPLIT_NO_EMPTY);
+		$emails = array_unique($emails);
+
+		return $emails;
+	}
+
+	// End:[ PHPKD - Moderated Attachments Staff Notify ]
+=================================================
+-------------------------------------------------
+
+	     Save the modified file "includes/class_dm_threadpost.php" and upload it to it's place again (ALLOW OVERWRITE).
+
+
+     3. Import the product's XML file "product-phpkd_vbasn.xml" from AdminCP (ALLOW OVERWRITE).
+
+     4. Configure usergroup settings -if required-.
+
+     5. You're Done :).
+
+
+$Version: 4.0.100 $ - $Id: upgrade.txt 3 2010-02-26 09:55:32Z PHPKD $

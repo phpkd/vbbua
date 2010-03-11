@@ -1,0 +1,452 @@
+[SIZE="2"][B][FONT="Tahoma"][B][CENTER]~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!.................. Brought to you by PHP KingDom ([url]www.phpkd.net[/url]) ..................!
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[/CENTER][/B][/FONT][/B][/SIZE]
+
+
+
+[B][COLOR="Red"]Please remember to click [COLOR="Blue"]Mark as Installed[/COLOR] if you use this product.[/COLOR]
+[COLOR="Purple"]Support requests from members who have not marked this as installed will be considered low priority.[/COLOR][/B]
+
+
+[B]Name:[/B] PHPKD - Moderated Attachments Staff Notify
+[B]Version:[/B] 4.0.100
+
+[B]Description:[/B] If attachments are moderated by default for any usergroup (using "PHPKD - Usergroup Attachment Moderation" product), then this product will auto notify staff members of these newly uploaded moderated attachments.
+
+
+[B]Compatible with:[/B] All 3.8.x/4.0.x vBulletin versions.
+
+
+[U][B]Requirements:[/B][/U]
+[LIST]
+     [*]vBulletin version 3.8.x/4.0.x
+     [*][URL="http://tools.phpkd.net/en/producthelp/url/vbafm/"]PHPKD - Usergroup Attachment Moderation 4.0.100+[/URL]
+[/LIST]
+
+
+[U][B]Helpful links:[/B][/U]
+[LIST]
+     [*][url="http://forum.phpkd.net/project.php?do=issuelist&projectid=2&issuetypeid=bug"]Bug Reports[/url]
+     [*][url="http://forum.phpkd.net/project.php?do=issuelist&projectid=2&issuetypeid=feature"]Feature Requests[/url]
+[/LIST]
+
+
+[U][B]Features:[/B][/U]
+[LIST]
+     [*][U][B]General Features:-[/B][/U]
+	[LIST]
+	     [*]MD5 checked.
+	     [*]Fully Phrased.
+	     [*]Fully Supported.
+	     [*]Accurate Processing.
+	     [*]Professionally Coded.
+	     [*]Detailed Documentation.
+	     [*]Zero Additional Queries.
+	     [*]Requires only one manual edit.
+	     [*]Doing all default vBulletin checks & vBulletin Fully Compatible.
+	[/LIST]
+[/LIST]
+
+
+[U][B]Installation Procedure:[/B][/U]
+[LIST=1]
+     [*]Upload required files to their appropriate places:
+	[LIST]
+	     [*]includes
+		[LIST]
+		     [*]xml
+			[LIST]
+			      [*]bitfield_phpkd_vbasn.xml
+			[/LIST]
+		     [*]md5_sums_phpkd_vbasn.php
+		[/LIST]
+	[/LIST]
+     [*]Do the following small manual edit, open the file "includes/class_upload.php" (follow instructions relative to your vB version):
+	[B]Both 3.8.x & 4.0.x:[/B]
+	     [U]Search for:[/U]
+			[CODE]	function email_moderators($fields)[/CODE]
+
+	     [U]Add above it directly the following code:[/U]
+			[CODE]	// Begin:[ PHPKD - Moderated Attachments Staff Notify ]
+
+	/**
+	* Fetches the amount of moderated attachments associated with a posthash and user
+	*
+	* @param	string	Post hash
+	* @param	integer	User ID associated with post hash (-1 means current user)
+	*
+	* @return	integer	Number of attachments
+	*/
+	function phpkd_vbasn_fetch_mod_attachment_count($postid, $userid = -1)
+	{
+		if ($userid == -1)
+		{
+			$userid = $this->fetch_field('userid', 'post');
+		}
+		$userid = intval($userid);
+
+		$attachcount = $this->dbobject->query_first("
+			SELECT COUNT(*) AS count
+			FROM " . TABLE_PREFIX . "attachment
+			WHERE postid = '$postid'
+				AND userid = $userid
+				AND visible != 1
+		");
+
+		return intval($attachcount['count']);
+	}
+
+
+	/**
+	* Fetches the moderated attachments associated with a posthash and user
+	*
+	* @param	string	Post hash
+	* @param	integer	User ID associated with post hash (-1 means current user)
+	*
+	* @return	array Moderated attachments IDs
+	*/
+	function phpkd_vbasn_fetch_mod_attachment($postid, $userid = -1)
+	{
+		if ($userid == -1)
+		{
+			$userid = $this->fetch_field('userid', 'post');
+		}
+		$userid = intval($userid);
+
+		$attachs = $this->dbobject->query_read_slave("
+			SELECT attachmentid, filename
+			FROM " . TABLE_PREFIX . "attachment
+			WHERE postid = '$postid'
+				AND userid = $userid
+				AND visible != 1
+		");
+
+		$modattach = array();
+		while ($attach = $this->dbobject->fetch_array($attachs))
+		{
+			$modattach[$attach['attachmentid']] = array('attachmentid' => $attach['attachmentid'], 'filename' => $attach['filename'], 'postid' => $attach['postid'], 'dateline' => $attach['dateline']);
+		}
+
+		return $modattach;
+	}
+
+
+	/**
+	* Process notifications & email staff members upon newly uploaded moderated attachments
+	*
+	* @param	string|array	A string or array of dbfields to check for email addresses; also doubles as mod perm names
+	* @param	integer			Number of newly uploaded moderated attachments
+	* @param	array			Array of newly uploaded moderated attachments
+	*/
+	function phpkd_vbasn_email_moderators($fields, $attachcount, $attachs)
+	{
+		global $vbphrase;
+
+		if ($this->info['skip_moderator_email'] OR !$this->info['forum'] OR in_coventry($this->fetch_field('userid', 'post'), true))
+		{
+			return;
+		}
+
+		$mod_emails = $this->phpkd_vbasn_fetch_moderator_modattach_emails($fields, $this->info['forum']['parentlist'], $newpost_lang);
+
+		if (!empty($mod_emails))
+		{
+			$foruminfo = $this->info['forum'];
+			$foruminfo['title_clean'] = unhtmlspecialchars($foruminfo['title_clean']);
+
+			$threadinfo = fetch_threadinfo($this->fetch_field('threadid'));
+
+			$email = ($this->info['user']['email'] ? $this->info['user']['email'] : $this->registry->userinfo['email']);
+			$browsing_user = $this->registry->userinfo['username'];
+
+			// ugly hack -- should be fixed in the future
+			$this->registry->userinfo['username'] = unhtmlspecialchars($this->info['user']['username'] ? $this->info['user']['username'] : $this->registry->userinfo['username']);
+
+			$post = array_merge($this->existing, $this->post);
+			if (!$post['postid'])
+			{
+				$post['postid'] = $this->thread['firstpostid'];
+			}
+
+			require_once(DIR . '/includes/functions_misc.php');
+
+			foreach ($mod_emails AS $toemail)
+			{
+				if ($toemail != $email)
+				{
+					if ($threadinfo['prefixid'])
+					{
+						// need prefix in correct language
+						$threadinfo['prefix_plain'] = fetch_phrase(
+							"prefix_$threadinfo[prefixid]_title_plain",
+							'global',
+							'',
+							false,
+							true,
+							isset($newpost_lang["$toemail"]) ? $newpost_lang["$toemail"] : 0,
+							false
+						) . ' ';
+					}
+					else
+					{
+						$threadinfo['prefix_plain'] = '';
+					}
+
+					$attachdetails = "";
+					foreach ($attachs as $attach)
+					{
+						$attachdetails .= construct_phrase($vbphrase['phpkd_vbasn_modattachitem'], $attach['attachmentid'], $attach['filename']);
+					}
+
+					if (substr(SIMPLE_VERSION, 0, 1) >= 4)
+					{
+						$threadlink = fetch_seo_url('thread|nosession', $threadinfo);
+						eval(fetch_email_phrases('phpkd_vbasn_4x', iif(isset($newpost_lang["$toemail"]), $newpost_lang["$toemail"], 0)));
+					}
+					else
+					{
+						eval(fetch_email_phrases('phpkd_vbasn_3x', iif(isset($newpost_lang["$toemail"]), $newpost_lang["$toemail"], 0)));
+					}
+					vbmail($toemail, $subject, $message);
+				}
+			}
+
+			// back to normal
+			$this->registry->userinfo['username'] = htmlspecialchars_uni($browsing_user);
+		}
+	}
+
+
+	/**
+	* Fetches the email addresses of moderators to email when there is a newly uploaded moderated attachments in a forum.
+	*
+	* @param	string|array	A string or array of dbfields to check for email addresses; also doubles as mod perm names
+	* @param	string|array	A string (comma-delimited) or array of forum IDs to check
+	* @param	array			(By reference) An array of languageids associated with specific email addresses returned
+	*
+	* @return	array			Array of emails to mail
+	*/
+	function phpkd_vbasn_fetch_moderator_modattach_emails($fields, $forums, &$language_info)
+	{
+		// Only proceed if email features are enabled
+		if (!$this->registry->options['enableemail'] OR !$this->registry->options['phpkd_vbasn_emailto'])
+		{
+			return;
+		}
+
+		$language_info = array();
+
+		if (!is_array($fields))
+		{
+			$fields = array($fields);
+		}
+
+		// figure out the fields to select and the permissions to check
+		$field_names = '';
+		$mod_perms = array();
+		foreach ($fields AS $field)
+		{
+			if ($permfield = intval($this->registry->bf_misc_phpkd_vbasn["$field"]))
+			{
+				$mod_perms[] = "(moderator.phpkd_vbasn & $permfield)";
+			}
+
+			$field_names .= "$field, ' ',";
+		}
+
+		if (sizeof($fields) > 1)
+		{
+			// kill trailing comma
+			$field_names = 'CONCAT(' . substr($field_names, 0, -1) . ')';
+		}
+		else
+		{
+			$field_names = reset($fields);
+		}
+
+		// figure out the forums worth checking
+		if (is_array($forums))
+		{
+			$forums = implode(',', $forums);
+		}
+		if (!$forums)
+		{
+			return array();
+		}
+
+		$phpkd_vbasn = '';
+
+		$moderators = $this->registry->db->query_read_slave("
+			SELECT $field_names AS phpkd_vbasn
+			FROM " . TABLE_PREFIX . "forum
+			WHERE forumid IN (" . $this->registry->db->escape_string($forums) . ")
+		");
+		while ($moderator = $this->registry->db->fetch_array($moderators))
+		{
+			$phpkd_vbasn .= ' ' . trim($moderator['phpkd_vbasn']);
+		}
+
+		if (empty($phpkd_vbasn) OR $this->registry->options['phpkd_vbasn_emailto'] == 1)
+		{
+			// get a list of super mod groups
+			$smod_groups = array();
+			foreach ($this->registry->usergroupcache AS $ugid => $groupinfo)
+			{
+				if ($groupinfo['adminpermissions'] & $this->registry->bf_ugp_adminpermissions['ismoderator'])
+				{
+					// super mod group
+					$smod_groups[] = $ugid;
+				}
+			}
+		}
+
+		if ($mod_perms)
+		{
+			$mods = $this->registry->db->query_read_slave("
+				SELECT DISTINCT user.email, user.languageid
+				FROM " . TABLE_PREFIX . "moderator AS moderator
+				LEFT JOIN " . TABLE_PREFIX . "user AS user USING(userid)
+				WHERE
+					(
+						(moderator.forumid IN (" . $this->registry->db->escape_string($forums) . ") AND moderator.forumid <> -1)
+						" . (!empty($smod_groups) ? "OR (user.usergroupid IN (" . implode(',', $smod_groups) . ") AND moderator.forumid = -1)" : '') . "
+					)
+					AND (" . implode(' OR ', $mod_perms) . ")
+			");
+			while ($mod = $this->registry->db->fetch_array($mods))
+			{
+				$language_info["$mod[email]"] = $mod['languageid'];
+				$phpkd_vbasn .= ' ' . $mod['email'];
+			}
+		}
+
+		$emails = preg_split('#\s+#', trim($phpkd_vbasn), -1, PREG_SPLIT_NO_EMPTY);
+		$emails = array_unique($emails);
+
+		return $emails;
+	}
+
+	// End:[ PHPKD - Moderated Attachments Staff Notify ][/CODE]
+	[B]Save the modified file "includes/class_upload.php" and upload it to it's place again (ALLOW OVERWRITE).[/B]
+     [*]Import the product's XML file "product-phpkd_vbasn.xml" from AdminCP.
+     [*]Configure usergroup settings -if required-.
+     [*]You're Done :).
+[/LIST]
+
+
+[U][B]Upgrade Procedure:[/B][/U]
+[LIST=1]
+     [*]Same as "Installation Procedure", but "Allow Overwrite" for both file uploads & product import.
+[/LIST]
+
+
+[U][B]Controls:[/B][/U]
+[LIST]
+     [*][B][U]Settings:[/U][/B]
+	vBulletin AdminCP » Settings » Options » Message Attachment Options » [B]PHPKD - Moderated Attachments Staff Notify[/B]
+
+     [*][B][U]Forum Options:[/U][/B]
+	vBulletin AdminCP » Forums & Moderators » Forum Manager » Select Forum to edit » PHPKD - Moderated Attachments Staff Notify » [B]Email Addresses to Notify When there is newly uploaded Moderated Attachments[/B]
+
+     [*][B][U]Moderator Permissions:[/U][/B]
+	vBulletin AdminCP » Forums & Moderators » Options » Show All Moderators » Select Moderator to edit permissions » [B]Receive Email When there is newly uploaded Moderated Attachments[/B]
+[/LIST]
+
+
+[U][B]License:[/B][/U]
+[URL="http://info.phpkd.net/en/license/free/"]Read Here: http://info.phpkd.net/en/license/free/[/URL]
+--------------- --------------- --------------- ---------------
+Creative Commons - Attribution-Noncommercial-Share Alike 3.0
+[url]http://creativecommons.org/licenses/by-nc-sa/3.0/[/url]
+--------------- --------------- --------------- ---------------
+[LIST]
+     [*][B][U]You are free:[/U][/B]
+     [LIST]
+	[*]To Share — to copy, distribute and transmit the work
+	[*]To Remix — to adapt the work
+     [/LIST]
+
+
+     [*][B][U]Under the following conditions:[/U][/B]
+     [LIST]
+	[*][B][Attribution]:[/B] You must attribute the work in the manner specified by the author or licensor (but not in any way that suggests that they endorse you or your use of the work).
+	[*][B][Noncommercial]:[/B] You may not use this work for commercial purposes.
+	[*][B][Share Alike]:[/B] If you alter, transform, or build upon this work, you may distribute the resulting work only under the same or similar license to this one.
+     [/LIST]
+
+
+     [*]For any reuse or distribution, you must make clear to others the license terms of this work. The best way to do this is with a link to [url="http://creativecommons.org/licenses/by-nc-sa/3.0/"]this web page[/url].
+     [*]Any of the above conditions can be waived if you get explicit permission from the copyright holder.
+     [*]Nothing in this license impairs or restricts the author's moral rights.
+[/LIST]
+--------------- --------------- --------------- ---------------
+Your fair dealing and other rights are in no way affected by the above.
+This is a human-readable summary of the Legal Code (the full license).
+[url]http://creativecommons.org/licenses/by-nc-sa/3.0/legalcode[/url]
+--------------- --------------- --------------- ---------------
+
+
+[U][B]Help with:[/B][/U]
+[LIST]
+	[*]Translations to benefit more users.
+	[*]Suggestions & feature requests to develop this product.
+	[*]Contributing any updates, upgrades and/or any new features.
+	[*]Spreading this product. Yes, you're free to re-distribute this product as it is (See 'Free License' details).
+[/LIST]
+
+
+[U][B]Known Issues:[/B][/U]
+[LIST]
+     [*]Nothing till now!
+[/LIST]
+
+
+[U][B]Future TO-DO-LIST:[/B][/U]
+[LIST]
+     [*]Post your suggestions!
+[/LIST]
+
+
+[U][B]History:[/B][/U]
+[LIST]
+     [*][B]v3.8.100[/B] 14/01/2009 02:00 PM UTC: First 3.8.x release (public)
+     [*][B]v4.0.100[/B] 27/02/2010 08:00 PM UTC: First 4.0.x release (public)
+[/LIST]
+
+
+[U][B]Screen Shots:[/B][/U]
+[LIST]
+     [*]Available down there.
+[/LIST]
+
+
+[U][B]Technical Notes:[/B][/U]
+[LIST]
+     [*][COLOR="DimGray"]New Plugins:[/COLOR] 6
+     [*][COLOR="DimGray"]New Phrases:[/COLOR] 16
+     [*][COLOR="dimgray"]New Templates:[/COLOR] 0
+     [*][COLOR="dimgray"]Manual Template changes:[/COLOR] 0
+     [*][COLOR="dimgray"]Auto Template changes:[/COLOR] 0
+     [*][COLOR="dimgray"]New Files:[/COLOR] 2
+     [*][COLOR="dimgray"]Manual File Changes:[/COLOR] 1
+     [*][COLOR="dimgray"]New vBulletin Settings:[/COLOR] 1
+     [*][COLOR="dimgray"]New Usergroup Permissions:[/COLOR] 0
+     [*][COLOR="dimgray"]New Moderator Permissions:[/COLOR] 1
+     [*][COLOR="dimgray"]New Administrator Permissions:[/COLOR] 0
+     [*][COLOR="dimgray"]New Forum Options:[/COLOR] 1
+     [*][COLOR="dimgray"]New DB Tables:[/COLOR] 0
+     [*][COLOR="dimgray"]DB Alterations:[/COLOR] 2
+     [*][COLOR="dimgray"]New Cronjobs:[/COLOR] 0
+     --------------------------------
+     [*][COLOR="dimgray"]Installation Level:[/COLOR] V.Easy
+     [*][COLOR="dimgray"]Installation Time:[/COLOR] ~15 seconds
+[/LIST]
+
+
+[B][U]Recent Products:[/U][/B]
+[LIST]
+     [*][URL="http://tools.phpkd.net/en/producthelp/url/vblvb/"]PHPKD - vB Link Verifier Bot[/URL]
+     [*][URL="http://tools.phpkd.net/en/producthelp/url/vbaqr/"]Advanced Quick Reply [ Attachments - Smilie box / menu - Thread Management - AJAX ][/URL]
+     [*][URL="http://tools.phpkd.net/en/producthelp/url/vbaqe/"]Advanced Quick Edit [ All Built-In BBCodes ][/URL]
+[/LIST]
