@@ -1,15 +1,15 @@
 <?php
 /*==================================================================================*\
 || ################################################################################ ||
-|| # Product Name: PHPKD - Moderated Attachments Staff Notify    Version: 4.0.100 # ||
-|| # License Type: Free License                                    $Revision: 3 $ # ||
+|| # Product Name: vB Ban Under Age Users                        Version: 4.0.100 # ||
+|| # License Type: Free License                                  $Revision: 134 $ # ||
 || # ---------------------------------------------------------------------------- # ||
 || # 																			  # ||
 || #            Copyright ©2005-2010 PHP KingDom. All Rights Reserved.            # ||
 || #     This product may be redistributed in whole or significant part under     # ||
 || #        "Creative Commons - Attribution-Noncommercial-Share Alike 3.0"        # ||
 || # 																			  # ||
-|| # -------------- 'vB Link Verifier Bot Lite' IS FREE SOFTWARE ---------------- # ||
+|| # ---------------- "vB Ban Under Age Users" IS FREE SOFTWARE ----------------- # ||
 || #        http://www.phpkd.net | http://info.phpkd.net/en/license/free          # ||
 || ################################################################################ ||
 \*==================================================================================*/
@@ -27,8 +27,8 @@ $md5_sum_versions['phpkd_vbbua'] = '4.0.100';
 /*============================================================================*\
 || ########################################################################### ||
 || # Version: 4.0.100
-|| # $Revision: 3 $
-|| # Released: $Date: 2010-02-26 11:55:32 +0200 (Fri, 26 Feb 2010) $
+|| # $Revision: 134 $
+|| # Released: $Date: 2010-05-30 05:03:47 +0300 (Sun, 30 May 2010) $
 || ########################################################################### ||
 \*============================================================================*/
 ?>
